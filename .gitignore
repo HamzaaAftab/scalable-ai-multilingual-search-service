@@ -1,5 +1,14 @@
-# Secrets
+# Secrets & Environment variables
 .env
+*.env
+**/.env
+
+# Internal design & planning docs
+architecture.md
+flow.md
+phases.md
+overview.md
+guidelines.md
 
 # Python
 __pycache__/
@@ -11,4 +20,3 @@ __pycache__/
 # Node / Next.js
 node_modules/
 .next/
-

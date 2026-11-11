@@ -31,7 +31,9 @@ LANGUAGES: dict[str, str] = {
     "italian": "Italian",
     "spanish": "Spanish",
     "german": "German",
+    "french" : "French",
 }
+
 TAGS_PER_LANGUAGE = 4  # 10 zubaanen x 4 = 40 tags
 MAX_TAG_LENGTH = 40  # Lambe "tags" asal mein jumle hote hain, search ke kaam ke nahi
 # Jawab ki had. Na batao to Groq bada andaza laga kar rate limit (OTPM) se pehle hi request rok deta hai.

@@ -8,13 +8,14 @@ import logging
 
 from fastapi import FastAPI
 
-from api.routes import tags
+from api.routes import products, tags
 
 # Abhi simple logs. Structured (JSON) logs baad mein common/logging.py mein aayenge.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="Blinkit Search API")
 app.include_router(tags.router)
+app.include_router(products.router)
 
 
 @app.get("/health")

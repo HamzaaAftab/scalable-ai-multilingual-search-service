@@ -1,0 +1,123 @@
+# Local infra: Kafka, MongoDB, Redis, Typesense
+# Chalane ke liye (infra/ folder se):  docker compose up -d
+# Secrets infra/.env se aate hain (.env.example dekho).
+
+name: blinkit-search
+
+services:
+  # ---------- Kafka (KRaft mode: Zookeeper ki zarurat nahi) ----------
+  kafka:
+    image: apache/kafka:4.3.2
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092" # host (tumhara PC) se Python scripts yahan connect karengi
+    environment:
+      CLUSTER_ID: "blinkit-search-local-01"
+      KAFKA_NODE_ID: 1
+      # Ek hi node broker bhi hai aur controller bhi ("combined" mode). Dev ke liye theek hai,
+      # production mein controllers alag hote hain.
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Do darwaze: INTERNAL = doosre containers ke liye (kafka:29092),
+      # EXTERNAL = tumhare PC ke liye (localhost:9092).
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # Sirf 1 broker hai, isliye replication 1 (default 3 hai jo yahan fail ho jata)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Typo wala topic khud na ban jaye ("product-event" bina s ke). Topics hum khud banayenge.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # Ek dafa chalta hai: topics banata hai, phir band ho jata hai
+  kafka-init:
+    image: apache/kafka:4.3.2
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        T=/opt/kafka/bin/kafka-topics.sh
+        $$T --bootstrap-server kafka:29092 --create --if-not-exists --topic product-events     --partitions 3 --replication-factor 1
+        $$T --bootstrap-server kafka:29092 --create --if-not-exists --topic product-events-dlq --partitions 1 --replication-factor 1
+        $$T --bootstrap-server kafka:29092 --describe
+    restart: "no"
+
+  # ---------- MongoDB (source of truth) ----------
+  mongodb:
+    image: mongo:8.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------- Redis (hot cache) ----------
+  redis:
+    image: redis:8.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    # Cache hai, database nahi: memory ki had 256MB. Bhar jaye to sab se kam use hui key nikal do (LRU).
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ---------- Typesense (search engine) ----------
+  typesense:
+    # 30.2 aur purane versions WSL kernel 6.18 par startup par hi segfault (exit 139) karte hain.
+    # 31.0 RC theek chalta hai. Stable 31.0 aate hi isko badal dena.
+    image: typesense/typesense:31.0.rc23
+    container_name: typesense
+    ports:
+      - "8108:8108"
+    command: "--data-dir /data --api-key=${TYPESENSE_API_KEY} --enable-cors"
+    volumes:
+      - typesense-data:/data
+    healthcheck:
+      # Image mein curl/wget nahi hai, perl hai. Ye /health par GET bhej kar "ok":true dhoondta hai.
+      # ($$ = compose mein asli $ likhne ka tareeqa)
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "$$s = IO::Socket::INET->new('localhost:8108') or exit 1; print $$s qq(GET /health HTTP/1.0\\r\\n\\r\\n); exit((join '', <$$s>) =~ /\"ok\":true/ ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+# Named volumes: container delete ho jaye to bhi data bacha rehta hai
+volumes:
+  kafka-data:
+  mongo-data:
+  typesense-data:

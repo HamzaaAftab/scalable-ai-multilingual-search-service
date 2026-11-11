@@ -5,10 +5,12 @@ description = "Multilingual search at scale: API + Kafka workers"
 requires-python = ">=3.12"
 # Versions pin hain, taake kal "pip install" se koi naya version aa kar code na tod de
 dependencies = [
+    "confluent-kafka==2.16.1",
     # [standard] = uvicorn (server) + "fastapi dev" command bhi saath aate hain
     "fastapi[standard]==0.162.0",
     "groq==1.7.0",
     "python-dotenv==1.2.4",
+    "redis==8.1.0",
 ]
 
 # src/ ke andar ke folders hamare packages hain: "from common.config import settings" kahin se bhi chale
@@ -18,3 +20,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/common", "src/api"]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+]
+
+[tool.pytest]
+testpaths = ["tests"]
