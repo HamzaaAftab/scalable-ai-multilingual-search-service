@@ -29,7 +29,23 @@ def get_producer() -> Producer:
 
 
 def publish_event(event: ProductEvent) -> tuple[int, int]:
-    """Event bhejo aur Kafka ke "haan" ka intezar karo. Wapas: (partition, offset)."""
+    """Product event bhejo aur Kafka ke "haan" ka intezar karo. Wapas: (partition, offset)."""
+    return publish_raw(
+        settings.kafka_topic,
+        # Key = product_id: ek product ke saare events ek hi partition mein, yani sahi order mein
+        key=event.product_id.encode("utf-8"),
+        value=event.model_dump_json().encode("utf-8"),
+    )
+
+
+def publish_to_dlq(key: bytes | None, value: bytes, headers: dict[str, str]) -> None:
+    """Kharab event DLQ mein. Value bilkul asli rehti hai, ghalti ki details headers mein."""
+    publish_raw(settings.kafka_dlq_topic, key=key, value=value, headers=headers)
+
+
+def publish_raw(topic: str, key: bytes | None, value: bytes,
+                headers: dict[str, str] | None = None) -> tuple[int, int]:
+    """Koi bhi message bhejo aur Kafka ke "haan" ka intezar karo. Wapas: (partition, offset)."""
     result: dict[str, KafkaError | Message | None] = {}
 
     def on_delivery(err: KafkaError | None, msg: Message) -> None:
@@ -39,10 +55,10 @@ def publish_event(event: ProductEvent) -> tuple[int, int]:
 
     producer = get_producer()
     producer.produce(
-        settings.kafka_topic,
-        # Key = product_id: ek product ke saare events ek hi partition mein, yani sahi order mein
-        key=event.product_id.encode("utf-8"),
-        value=event.model_dump_json().encode("utf-8"),
+        topic,
+        key=key,
+        value=value,
+        headers=[(k, v.encode("utf-8")) for k, v in (headers or {}).items()],
         on_delivery=on_delivery,
     )
     # produce() sirf andar ke buffer mein daalta hai. flush() tab tak rukta hai jab tak Kafka jawab na de.

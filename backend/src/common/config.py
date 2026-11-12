@@ -17,6 +17,8 @@ class Settings:
     groq_max_retries: int
     kafka_bootstrap_servers: str
     kafka_topic: str
+    # Jo events kabhi kamyab nahi honge (kharab data) wo yahan jate hain, taake baqi queue na ruke
+    kafka_dlq_topic: str
     # Admin ko 202 tabhi milega jab Kafka save kar le. Kafka itni der mein jawab na de to 503: atka hua form behtar nahi.
     kafka_publish_timeout_s: float
     redis_url: str
@@ -24,6 +26,8 @@ class Settings:
     redis_timeout_s: float
     # Itni der tak wahi Idempotency-Key dobara aaye to wahi product_id wapas milega
     idempotency_ttl_s: int
+    mongo_url: str
+    mongo_db: str
 
 
 def load_settings() -> Settings:
@@ -35,10 +39,14 @@ def load_settings() -> Settings:
         # PC se "localhost:9092", Docker container ke andar se "kafka:29092"
         kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         kafka_topic=os.getenv("KAFKA_TOPIC", "product-events"),
+        kafka_dlq_topic=os.getenv("KAFKA_DLQ_TOPIC", "product-events-dlq"),
         kafka_publish_timeout_s=float(os.getenv("KAFKA_PUBLISH_TIMEOUT_S", "5")),
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
         redis_timeout_s=float(os.getenv("REDIS_TIMEOUT_S", "0.5")),
         idempotency_ttl_s=int(os.getenv("IDEMPOTENCY_TTL_S", "86400")),  # 24 ghante
+        # Default nahi: password wala URL code mein nahi likhna
+        mongo_url=os.getenv("MONGO_URL", ""),
+        mongo_db=os.getenv("MONGO_DB", "blinkit"),
     )
 
 
